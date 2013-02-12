@@ -16,6 +16,7 @@
  *
  * @license http://opensource.org/licenses/gpl-license.php GNU Public License
  */
+namespace PHPjsonRPC;
 class RPCServer {
 
 	private $handles;
