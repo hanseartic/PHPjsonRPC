@@ -1,4 +1,4 @@
-php-jsonRPC
+PHPjsonRPC
 ===========
 
-Turns your PHP-Scripts into a RPC-Server.
+Serves your PHP-scripts via an RPC-style server and have their methods accessible via JSON.

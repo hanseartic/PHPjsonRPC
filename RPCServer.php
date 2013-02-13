@@ -19,14 +19,41 @@
 namespace PHPjsonRPC;
 class RPCServer {
 
-	private $handles;
-	private $request = "";
+	private $forbiddenMethods = array();
 	private $errorMessage = "";
 	private $handleErrorMethod = null;
+	private $handles;
+	private $request = "";
 
 	public function __construct() {
 		$this->handles = array();
 		$this->request = file_get_contents("php://input");
+	}
+
+	/**
+	 * Adds a method-name to the list of blocked methods. Blocked methods are not executed when requested via RPC.
+	 *
+	 * @param string $methodName The name of a method that should not be exposed over RPC
+	 *
+	 * @return array List of blocked methods
+	 */
+	public function BlockMethod($methodName) {
+		$this->forbiddenMethods[$methodName] = $methodName;
+		return $this->forbiddenMethods;
+	}
+
+	/**
+	 * Removes a method-name from the list of blocked methods. Blocked methods are not executed when requested via RPC.
+	 *
+	 * @param string $methodName The name of a method that should not be block any longer
+	 *
+	 * @return array List of blocked methods
+	 */
+	public function UnblockMethod($methodName) {
+		if (array_key_exists($methodName, $this->forbiddenMethods)) {
+			unset ($this->forbiddenMethods[$methodName]);
+		}
+		return $this->forbiddenMethods;
 	}
 
 	/**
@@ -66,7 +93,7 @@ class RPCServer {
 	 * @param (object|string|array)[]|null $objects @see Bind() for description of the possible parameters. If the parameter is omitted, this method acts just as getter. If parameter is null or an empty array, all bindings will be removed.
 	 *
 	 * @return object[] objects handled by RPCServer
-	 * @throws InvalidArgumentException
+	 * @throws \InvalidArgumentException
 	 */
 	public function Handles(array $objects = null) {
 		if (func_num_args() === 1) {
@@ -78,7 +105,7 @@ class RPCServer {
 			} elseif (null === $objects) {
 				$this->handles = array();
 			} else {
-				throw new InvalidArgumentException("The parameter must be an array.");
+				throw new \InvalidArgumentException("The parameter must be an array.");
 			}
 		}
 		return $this->handles;
@@ -105,7 +132,7 @@ class RPCServer {
 	 *
 	 * @param bool $autoHandleErrors defines if headers are sent automatically on error. Default is false.
 	 * @return string|bool returns true when the request was successfully handled, false otherwise.
-	 * @throws BadMethodCallException
+	 * @throws \BadMethodCallException|\BadFunctionCallException
 	 */
 	public function Listen($autoHandleErrors = false) {
 		$this->errorMessage = "";
@@ -160,11 +187,14 @@ class RPCServer {
 		);
 		try {
 			$methodName = $requestBody['method'];
+			if (array_key_exists($requestBody['method'], $this->forbiddenMethods)) {
+				throw new \BadFunctionCallException("The requested function does not exist.");
+			}
 			$handles = $this->Handles();
 			$handle = current($handles);
 			while (!method_exists($handle, $methodName)) {
 				$handle = next($handles);
-				if (false === $handle) throw new BadMethodCallException("Requested method is not defined.");
+				if (false === $handle) throw new \BadMethodCallException("Requested method is not defined.");
 			}
 			$methodResult = @call_user_func_array(array($handle, $methodName), $requestBody['params']);
 			$response['id'] = $requestBody['id'];
@@ -175,7 +205,7 @@ class RPCServer {
 				$response['status']['code'] = 2;
 				$response['status']['message'] = "Unknown method or invalid parameters.";
 			}
-		} catch (Exception $exception) {
+		} catch (\Exception $exception) {
 			$response['id'] = $requestBody['id'];
 			$response['status']['code'] = 1;
 			$response['status']['message'] = $exception->getMessage();
@@ -202,7 +232,7 @@ class RPCServer {
 		} elseif (is_string($object)) {
 			try {
 				$result = new $object;
-			} catch (Exception $ex) {}
+			} catch (\Exception $ex) {}
 		} elseif (is_array($object) && array_key_exists("type", $object)) {
 			$obj = new $object['type'];
 			unset ($object['type']);
@@ -210,7 +240,7 @@ class RPCServer {
 				foreach ($object as $property => $value) {
 					$obj->$property = $value;
 				}
-			} catch (Exception $ex) {}
+			} catch (\Exception $ex) {}
 			$result = $obj;
 		}
 		return $result;
