@@ -184,14 +184,37 @@ class RPCServer {
 		header('Access-Control-Allow-Headers: Content-Type');
 		header('Access-Control-Allow-Methods: POST');
 
-		$requestBody = json_decode($this->request, true);
+		$request = json_decode($this->request, true);
+		$requests = (is_array($request) && (! array_key_exists("method", $request)))
+			? $request
+			: array($request);
+		$responses = array();
+		foreach ($requests as $request) {
+			$response = $this->handleRequest($request);
+			if (null !== $response)
+				$responses[] = $response;
+		}
+		$response = (1 >= count($responses))
+			? current($responses)
+			: $responses;
+		if ($response && (count($response) > 0)) {
+			header('Content-type: application/json; charset=UTF-8', true);
+			echo json_encode($response);
+		}
+		return true;
+	}
+
+	private function handleRequest($request) {
 		$response = array(
 			'id' => null,
 			'jsonrpc' => "2.0",
 		);
 		try {
-			$methodName = $requestBody['method'];
-			if (array_key_exists($requestBody['method'], $this->forbiddenMethods)) {
+			if (empty($request['method'])) {
+				throw new \HttpQueryStringException();
+			}
+			$methodName = $request['method'];
+			if (array_key_exists($request['method'], $this->forbiddenMethods)) {
 				throw new \BadFunctionCallException("The requested function does not exist.");
 			}
 			$handles = $this->Handles();
@@ -200,8 +223,8 @@ class RPCServer {
 				$handle = next($handles);
 				if (false === $handle) throw new \BadMethodCallException("Requested method is not defined.");
 			}
-			$methodResult = @call_user_func_array(array($handle, $methodName), $requestBody['params']);
-			$response['id'] = $requestBody['id'];
+			$methodResult = @call_user_func_array(array($handle, $methodName), $request['params']);
+			$response['id'] = $request['id'];
 			if (false !== $methodResult) {
 				$response['result'] = $methodResult;
 			} else {
@@ -210,21 +233,24 @@ class RPCServer {
 				$response['error']['data']['request'] = $this->request;
 			}
 		} catch (\Exception $exception) {
-			$response['id'] = $requestBody['id'];
+			$response['id'] = $request['id'];
 			$response['error']['code'] = -32602;
 			if ("BadFunctionCallException" == get_class($exception) ||
 				"BadMethodCallException" == get_class($exception)) {
 				$response['error']['code'] = -32601;
+				$response['error']['message'] = $exception->getMessage();
 			}
-			$response['error']['message'] = $exception->getMessage();
+			if ("HttpQueryStringException" == get_class($exception)) {
+				$response['error']['code'] = -32600;
+				$response['error']['message'] = "Invalid Request";
+			}
 			$response['error']['data']['request'] = $this->request;
 			//$response[$requestBody['method']] = null;
 		}
-		if (!empty($requestBody['id'])) {
-			header('Content-type: application/json; charset=UTF-8', true);
-			echo json_encode($response);
+		if (!empty($request['id'])) {
+			return $response;
 		}
-		return true;
+		return null;
 	}
 
 	/**
