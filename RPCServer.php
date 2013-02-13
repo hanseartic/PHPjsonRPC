@@ -143,10 +143,13 @@ class RPCServer {
 			empty($_SERVER['CONTENT_TYPE']) ||
 			(0 !== stripos($_SERVER['CONTENT_TYPE'], 'application/json'))) {
 			$result = array(
-				'code' => 1,
+				'code' => -32400,
 				'message' => "",
-				'allowed' => array(),
-				'received' => array(),
+				'data' => array(
+					'allowed' => array(),
+					'received' => array(),
+					'request' => $this->request,
+				),
 			);
 			if (empty($_SERVER['CONTENT_TYPE']) ||
 				(0 !== stripos($_SERVER['CONTENT_TYPE'], 'application/json'))) {
@@ -154,8 +157,8 @@ class RPCServer {
 					header('HTTP/1.0 400 Bad Request', false, 400);
 				};
 				$result['message'] = "Invalid content type.";
-				$result['received']['CONTENT_TYPE'] = $_SERVER['CONTENT_TYPE'];
-				$result['allowed']['CONTENT_TYPE'] = "application/json";
+				$result['data']['received']['CONTENT_TYPE'] = $_SERVER['CONTENT_TYPE'];
+				$result['data']['allowed']['CONTENT_TYPE'] = "application/json";
 			} elseif ("POST" != $_SERVER['REQUEST_METHOD']) {
 				$this->handleErrorMethod = function() {
 					header('HTTP/1.0 405 Method not allowed', false, 405);
@@ -165,7 +168,11 @@ class RPCServer {
 				$result['received']['REQUEST_METHOD'] = $_SERVER['REQUEST_METHOD'];
 				$result['allowed']['REQUEST_METHOD'] = "POST";
 			}
-			$this->errorMessage = json_encode(array('status' => $result));
+			$this->errorMessage = json_encode(array(
+				'id' => null,
+				'jsonrpc' => "2.0",
+				'error' => $result,
+			));
 			if (true === $autoHandleErrors) {
 				$this->HandleError();
 				return true;
@@ -179,11 +186,8 @@ class RPCServer {
 
 		$requestBody = json_decode($this->request, true);
 		$response = array(
-			'id' => -1,
-			'status' => array(
-				'code' => 0,
-				'message' => "",
-			),
+			'id' => null,
+			'jsonrpc' => "2.0",
 		);
 		try {
 			$methodName = $requestBody['method'];
@@ -198,18 +202,23 @@ class RPCServer {
 			}
 			$methodResult = @call_user_func_array(array($handle, $methodName), $requestBody['params']);
 			$response['id'] = $requestBody['id'];
-			$response[$requestBody['method']] = $methodResult;
 			if (false !== $methodResult) {
-				$response['status']['message'] = "Operation successful.";
+				$response['result'] = $methodResult;
 			} else {
-				$response['status']['code'] = 2;
-				$response['status']['message'] = "Unknown method or invalid parameters.";
+				$response['error']['code'] = -32601;
+				$response['error']['message'] = "Unknown method or invalid parameters.";
+				$response['error']['data']['request'] = $this->request;
 			}
 		} catch (\Exception $exception) {
 			$response['id'] = $requestBody['id'];
-			$response['status']['code'] = 1;
-			$response['status']['message'] = $exception->getMessage();
-			$response[$requestBody['method']] = null;
+			$response['error']['code'] = -32602;
+			if ("BadFunctionCallException" == get_class($exception) ||
+				"BadMethodCallException" == get_class($exception)) {
+				$response['error']['code'] = -32601;
+			}
+			$response['error']['message'] = $exception->getMessage();
+			$response['error']['data']['request'] = $this->request;
+			//$response[$requestBody['method']] = null;
 		}
 		if (!empty($requestBody['id'])) {
 			header('Content-type: application/json; charset=UTF-8', true);
