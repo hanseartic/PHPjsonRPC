@@ -4,7 +4,7 @@
  * Created: 12.02.13 09:31
  * Copyright 2013 Paul Schütte
  *
- * This file is part of php-jsonRPC.
+ * This file is part of php-jsonRPC (https://github.com/hanseartic/PHPjsonRPC)
  *
  * php-jsonRPC is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  * php-jsonRPC is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
@@ -223,6 +223,8 @@ class RPCServer {
 				$handle = next($handles);
 				if (false === $handle) throw new \BadMethodCallException("Requested method is not defined.");
 			}
+            if (! isset($request['params']))
+                $request['params'] = array();
 			$methodResult = @call_user_func_array(array($handle, $methodName), $request['params']);
 			$response['id'] = $request['id'];
 			if (false !== $methodResult) {
@@ -245,7 +247,6 @@ class RPCServer {
 				$response['error']['message'] = "Invalid Request";
 			}
 			$response['error']['data']['request'] = $this->request;
-			//$response[$requestBody['method']] = null;
 		}
 		if (!empty($request['id'])) {
 			return $response;
