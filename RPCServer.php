@@ -41,10 +41,13 @@ class RPCServer {
 	private $handles;
 	private $request = "";
 
-	public function __construct() {
-		$this->handles = array();
-		$this->request = file_get_contents("php://input");
-	}
+    public function __construct() {
+        $this->handles = array();
+        $this->request = file_get_contents("php://input");
+        if (isset($_SERVER["HTTP_CONTENT_TYPE"]) && empty($_SERVER["CONTENT_TYPE"])) {
+            $_SERVER["CONTENT_TYPE"] = $_SERVER["HTTP_CONTENT_TYPE"];
+        }
+    }
 
 	/**
 	 * Adds a method-name to the list of blocked methods. Blocked methods are not executed when requested via RPC.
